@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Recursive Learning & Knowledge Distillation — Experiment Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Global random seed (set everywhere before any data or model ops)
+seed: 42
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+  data_dir: "./data"
+  results_dir: "./results"
+  figures_dir: "./results/figures"
+  checkpoints_dir: "./results/checkpoints"
+
+# ── Data Split ───────────────────────────────────────────────────────────────
+data:
+  val_fraction: 0.10       # Fraction of 60k training pool held out for validation
+  p_labeled: 0.10          # Fraction of training pool treated as labeled
+                           # ~5,400 labeled / ~48,600 unlabeled at default
+  num_workers: 0           # 0 = main-process DataLoader (safe on all CPUs)
+  pin_memory: false        # Only beneficial with CUDA; leave false for CPU
+
+# ── Teacher Model (SmallCNN) ─────────────────────────────────────────────────
+teacher:
+  name: "SmallCNN"
+  conv_channels: [32, 32]  # Filters in conv block 1 and 2
+  fc_hidden: 128           # Hidden units in the FC layer
+  dropout: 0.3
+
+# ── Student Model (TinyCNN) ──────────────────────────────────────────────────
+student:
+  name: "TinyCNN"
+  conv_channels: [8]       # Filters in the single conv block
+  fc_hidden: 64
+  dropout: 0.3
+
+# ── Supervised Training (Exp 0, teacher initial training) ────────────────────
+training:
+  batch_size: 64
+  epochs: 20
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  optimizer: "adam"        # adam | sgd
+  scheduler: "cosine"      # cosine | step | none
+  patience: 7              # Early-stopping patience (val loss plateau)
+
+# ── Recursive / Self-Training (Exp 1 & Exp 3) ────────────────────────────────
+recursive:
+  max_rounds: 5
+  confidence_threshold: 0.95   # Min max-probability to accept a pseudo-label
+  fine_tune_epochs: 5          # Training epochs per self-training round
+  min_pseudo_labels: 10        # Abort round if fewer than this many are accepted
+  # DIAGNOSTIC ONLY — never exposes withheld labels to training gradient updates
+  use_true_labels_for_diagnostic: true
+
+# ── Knowledge Distillation (Exp 2 & Exp 3) ───────────────────────────────────
+distillation:
+  temperature: 4.0         # T — softens teacher distribution
+  alpha: 0.5               # Weight on CE (hard-label) term; (1-alpha) on KL term
+  epochs: 20
+  batch_size: 64
+  learning_rate: 1.0e-3
+  weight_decay: 1.0e-4
+  # Ablation grids (swept in Exp 2 ablation sub-experiment)
+  temperature_grid: [1, 2, 4, 6, 8]
+  alpha_grid: [0.1, 0.3, 0.5, 0.7, 0.9]
+
+# ── Evaluation & Latency ─────────────────────────────────────────────────────
+evaluation:
+  latency_n_samples: 1000  # Number of single-sample inferences for latency
+  latency_warmup: 50       # Warm-up calls excluded from measurement
